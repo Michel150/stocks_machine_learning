@@ -1,1 +1,1 @@
-# stocks_machine_learning
+# stocks machine learning
