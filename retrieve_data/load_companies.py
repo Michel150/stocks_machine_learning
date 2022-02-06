@@ -29,6 +29,6 @@ def load_year(year):
         companies.append(data.company(href, name))
     return companies
 
-companies = load_year(2018)
+companies = load_year(2016)
 print(companies)
 #sqlite_connector.generate_db(companies=companies)
