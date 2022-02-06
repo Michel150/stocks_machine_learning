@@ -4,6 +4,7 @@ import requests
 from lxml import etree
 import data
 import locale
+import sqlite_connector
 
 locale.setlocale(locale.LC_ALL, 'de_DE.utf-8')
 s = requests.Session()
@@ -21,11 +22,10 @@ def get_val(num_str):
 
 def get_cur_val(num_str):
     parts = num_str.split()
-    print(parts)
     if parts[1] == 'M€':
-        return int(1e6 * locale.atof(parts[0][:-2]))
+        return int(1e6 * locale.atof(parts[0]))
     if parts[1] == '€':
-        return locale.atof(parts[0][:-2])
+        return locale.atof(parts[0])
     print(f'unknown currency {parts[0]}-{parts[1]}, return 0 as conversion')
     return 0
 
@@ -77,7 +77,8 @@ def load_data(year):
     }
     converters_1 = [get_cur_val, get_cur_val, get_val]
     for entry in load_0(year, params=params_1, converters=converters_1):
-        companies[entry[0]].set_data_1(*entry)
+        if entry[0] in companies:
+            companies[entry[0]].set_data_1(*entry)
 
     params_2 = {
         "kgv": "-1000_",
@@ -86,10 +87,13 @@ def load_data(year):
     }
     converters_2 = [get_float, get_float, get_float]
     for entry in load_0(year, params=params_2, converters=converters_2):
-        companies[entry[0]].set_data_2(*entry)
+        if entry[0] in companies:
+            companies[entry[0]].set_data_2(*entry)
 
-    print(companies)
-#    companies = load_1(year)
-#    print(companies)
+    return companies
 
-load_data(2016)
+#data = load_data(2016)
+for i in range(5):
+    year = 2018 + i
+    comps = load_data(year)
+    sqlite_connector.save_company_infos(year, comps)
