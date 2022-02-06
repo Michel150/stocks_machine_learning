@@ -1,40 +1,32 @@
-#!/usr/bin/python
-
 import sqlite3
 
-def generate_db(create = False, write = False):
-    conn = sqlite3.connect('cik-lookup.db')
+def get_line(file):
+    l = file.readline()
+    empty = False
+    while l is not None and len(l) > 2:
+        if not empty:
+            yield l
+        try: 
+            l = file.readline()
+            empty = False
+        except UnicodeDecodeError as e:
+            empty = True
+
+def generate_db(create = False, companies = []):
+    conn = sqlite3.connect('companies.db')
     if create:
         conn.execute('''CREATE TABLE COMPANY
-                (cik INT PRIMARY KEY     NOT NULL,
-                NAME           TEXT    NOT NULL);''')
+                (href TEXT PRIMARY KEY     NOT NULL,
+                isin           INT,
+                name           TEXT    NOT NULL);''')
+    if len(companies) > 0:
+        records = [(c.href, c.isin, c.name) for c in companies]
+        conn.executemany('INSERT INTO COMPANY VALUES(?,?,?);',records);
 
-    if write:
-        with open('cik-lookup-data.txt', 'r') as f:
-            cps = []
-            l = f.readline()
-            empty = False
-            while l is not None:
-                if not empty:
-                    try:
-                        line_split = l.split(":")
-                        N = len(line_split)
-                        name = "".join(line_split[:N - 2])
-                        cik = int(line_split[N - 2])
-                        cps.append((cik, name))
-                    except:
-                        pass
-                try:
-                    l = f.readline()
-                    empty = False
-                except:
-                    empty = True
-
-            print(len(cps))
-            conn.executemany("INSERT INTO COMPANY ('cik', 'NAME') VALUES (?, ?)", cps)
-            conn.commit()
-
+    print('start commit')
+    conn.commit()
+    print('end commit')
 
     conn.close()
 
-generate_db(write=True)
+#generate_db(create=True)
