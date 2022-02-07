@@ -12,16 +12,12 @@ def get_line(file):
         except UnicodeDecodeError as e:
             empty = True
 
-def generate_db(create = False, companies = []):
+def generate_db():
     conn = sqlite3.connect('companies.db')
-    if create:
-        conn.execute('''CREATE TABLE COMPANY
-                (href TEXT PRIMARY KEY     NOT NULL,
-                isin           INT,
-                name           TEXT    NOT NULL);''')
-    if len(companies) > 0:
-        records = [(c.href, c.isin, c.name) for c in companies]
-        conn.executemany('INSERT INTO COMPANY VALUES(?,?,?);',records);
+    conn.execute('''CREATE TABLE COMPANY
+            (href TEXT PRIMARY KEY     NOT NULL,
+            isin           INT,
+            name           TEXT    NOT NULL);''')
 
     print('start commit')
     conn.commit()
@@ -29,25 +25,40 @@ def generate_db(create = False, companies = []):
 
     conn.close()
 
+def save_companies(conn, companies):
+    records = [(c.href, c.isin, c.name) for c in companies]
+    conn.executemany('INSERT or IGNORE INTO COMPANY VALUES(?,?,?);',records);
+
+
+def entry_exists(conn, year, href, table):
+    cur = conn.cursor()
+    if table == "QUOTES":
+        cur.execute('SELECT href FROM QUOTES WHERE year==? AND href==?;', (year, href))
+    if table == "BALANCE_SHEET":
+        cur.execute('SELECT href FROM BALANCE_SHEET WHERE year==? AND href==?;', (year, href))
+    if table == "INCOME_STATEMENT":
+        cur.execute('SELECT href FROM INCOME_STATEMENT WHERE year==? AND href==?;', (year, href))
+    r = cur.fetchone()
+    return r is not None
+
 def save_quotes(conn, year, companies):
     records = []
     for c in companies.values():
         if c.data1 and c.data2:
             market_cap = int( c.sales * c.kuv )
             records.append((year, c.href, market_cap, c.dividend_per_share * c.number_of_shares))
-    conn.executemany('INSERT INTO QUOTES VALUES(?,?,?,?);',records);
+    conn.executemany('INSERT or IGNORE INTO QUOTES VALUES(?,?,?,?)' ,records);
 
 def save_balance_sheet(conn, year, companies):
     records = []
     for c in companies.values():
         if c.data1:
             records.append((year, c.href, c.number_of_shares, c.sum_assets, c.sum_liabilities, c.number_of_employees))
-    print(records[:10])
-    conn.executemany('INSERT INTO BALANCE_SHEET VALUES(?,?,?,?,?,?);',records);
+    conn.executemany('INSERT or IGNORE INTO BALANCE_SHEET VALUES(?,?,?,?,?,?);',records);
 
 def save_income_statement(conn, year, companies):
     records = [(year, c.href, c.sales, c.profit_loss) for c in companies.values()]
-    conn.executemany('INSERT INTO INCOME_STATEMENT VALUES(?,?,?,?);',records);
+    conn.executemany('INSERT or IGNORE INTO INCOME_STATEMENT VALUES(?,?,?,?);',records);
 
 
 def save_company_infos(year, companies):

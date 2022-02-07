@@ -30,31 +30,42 @@ def get_cur_val(num_str):
     return 0
 
 def load_0(year, params, converters):
+    wanted_ps = 100
+    actual_ps = wanted_ps
+    p = 0
+
     data = {
-        "page":"0",
-        "page_size": 100,
+        "page":f"{p}",
+        "page_size": wanted_ps,
         "year": f"_year_{year}",
-        "sales": "50000_",
+        "sales": "10000_",
     }
     data.update(params)
-    r = s.post('https://www.ariva.de/aktiensuche/_result_table.m',
-        data=data)
-    if r.status_code != 200:
-        return []
 
-    root = etree.HTML(r.content.decode('utf-8'))
-    tables = root.xpath('//table')
-    table = tables[0]
-    rows = table.xpath('./tbody/tr')
-    for row in rows:
-        columns = row.xpath('./td')
-        href = columns[1].xpath('./a/@href')[0][1:-6]
-        sales = get_cur_val(columns[4].text)
+    while p < 10 and actual_ps == wanted_ps:
+        actual_ps = 0
+        data["page"] = f"{p}"
+        r = s.post('https://www.ariva.de/aktiensuche/_result_table.m',
+            data=data)
+        if r.status_code != 200:
+            return []
 
-        vals = []
-        for i, converter in enumerate(converters):
-            vals.append(converter(columns[5 + i].text))
-        yield (href, sales, *vals)
+        root = etree.HTML(r.content.decode('utf-8'))
+        tables = root.xpath('//table')
+        table = tables[0]
+        rows = table.xpath('./tbody/tr')
+        for row in rows:
+            columns = row.xpath('./td')
+            href = columns[1].xpath('./a/@href')[0][1:-6]
+            sales = get_cur_val(columns[4].text)
+
+            vals = []
+            for i, converter in enumerate(converters):
+                vals.append(converter(columns[5 + i].text))
+            yield (href, sales, *vals)
+            actual_ps += 1
+
+        p += 1
 
 def load_data(year):
     companies = dict()
@@ -91,9 +102,3 @@ def load_data(year):
             companies[entry[0]].set_data_2(*entry)
 
     return companies
-
-#data = load_data(2016)
-for i in range(5):
-    year = 2018 + i
-    comps = load_data(year)
-    sqlite_connector.save_company_infos(year, comps)
