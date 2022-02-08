@@ -1,106 +1,103 @@
-import sqlite_connector
+import sqlite_connector as sc
 import numpy as np
-import itertools
 
-HREF = 1
-CAP = 2
-DIV = 3
+class data_loader:
+    def __init__(self, yearS = 2016, yearE = 2021):
+        self.conn = sc.get_db('../')
+        self.yearS = yearS
+        self.hrefs = sc.load_hrefs(self.conn)
+        self.year_data = []
+        for year in range(yearS, yearE + 1):
+            self.year_data.append(sc.load_year_data(self.conn, year, self.hrefs))
 
-def create_hrefs(href_to_idx, fh):
-    hrefs_uf = [''] * len(href_to_idx)
-    for href, idx in href_to_idx.items():
-        hrefs_uf[idx] = href
-    hrefs = []
-    for filter, href in zip(fh, hrefs_uf):
-        if filter:
-            hrefs.append(href)
-    return hrefs
+    def PER(self, year):
+        d = self.year_data[year - self.yearS]
+        ret = np.zeros(len(d))
+        idxs = d[:,sc.INCOME] != 0
+        ret[idxs] = d[idxs,sc.MARKET_CAP] / d[idxs, sc.INCOME]
+        return ret
 
-def two_yr_change(conn, year):
-    res = []
-    for i in range(3):
-        res.append(sqlite_connector.load_quotes_for_years(conn, year + i))
+    def PER_H(self, year, yearS):
+        if yearS < self.yearS:
+            return None
+        d = self.year_data[year - yearS]
+        income = np.zeros(len(d))
+        for i in range(yearS - self.yearS, year - self.yearS + 1):
+            income += self.year_data[i][:, sc.INCOME]
+        idxs = income != 0
+        return (year - yearS + 1) * (d[idxs, sc.MARKET_CAP] / income[idxs])
 
-    c = 0
-    href_to_idx = dict()
-    for e in itertools.chain(*res):
-        if e[HREF] not in href_to_idx:
-            href_to_idx[e[HREF]] = c
-            c += 1
+    def PRR(self, year):
+        d = self.year_data[year - self.yearS]
+        ret = np.zeros(len(d))
+        idxs = d[:,sc.RETURN] != 0
+        ret[idxs] = d[idxs,sc.MARKET_CAP] / d[idxs, sc.RETURN]
+        return ret
 
-    caps = np.zeros((c, 3))
-    divs = np.zeros((c, 3))
-    for i in range(3):
-        for e in res[i]:
-            idx = href_to_idx[e[HREF]]
-            caps[idx, i] = e[CAP]
-            divs[idx, i] = e[DIV]
+    def PBR(self, year):
+        d = self.year_data[year - self.yearS]
+        ret = d[:,sc.AKTIVA] - d[:,sc.PASSIVA]
+        idxs = ret != 0
+        ret[idxs] = d[idxs,sc.MARKET_CAP] / ret[idxs]
+        return ret
 
-    fh = (caps[:,0] * caps[:,1] * caps[:, 2]) != 0
+    def DIV_Y(self, year):
+        d = self.year_data[year - self.yearS]
+        ret = np.copy(d[:, sc.MARKET_CAP])
+        idxs = ret != 0
+        ret[idxs] = d[idxs,sc.DIVIDENDS] / ret[idxs]
+        return ret
 
-    new_val = caps[fh, 2] + np.sum(divs[fh, 1:], axis=1)
-    change = (new_val / caps[fh,0]) - 1
+    def ACT_Y(self, year):
+        d = self.year_data[year - self.yearS]
+        ret = d[:,sc.AKTIVA] - d[:,sc.PASSIVA]
+        idxs = ret != 0
+        ret[idxs] = d[idxs,sc.INCOME] / ret[idxs]
+        return ret
 
-    return (create_hrefs(href_to_idx, fh), change)
+    def RET_Y(self, year):
+        d = self.year_data[year - self.yearS]
+        ret = np.copy(d[:,sc.RETURN])
+        idxs = ret != 0
+        ret[idxs] = d[idxs,sc.INCOME] / ret[idxs]
+        return ret
 
-def one_yr_change(conn, year, hrefs):
-    res = []
-    for i in range(2):
-        res.append(sqlite_connector.load_quotes_for_years(conn, year + i))
+    def CAP_Y(self, year):
+        d = self.year_data[year - self.yearS]
+        ret = np.copy(d[:,sc.AKTIVA])
+        idxs = ret != 0
+        ret[idxs] = d[idxs,sc.INCOME] / ret[idxs]
+        return ret
 
-    href_to_idx = dict()
-    for i, href in enumerate(hrefs):
-        href_to_idx[href] = i
+    def DEBT(self, year):
+        d = self.year_data[year - self.yearS]
+        ret = np.copy(d[:,sc.AKTIVA])
+        idxs = ret != 0
+        ret[idxs] = d[idxs,sc.PASSIVA] / ret[idxs]
+        return ret
 
-    caps = np.zeros((len(hrefs), 2))
-    divs = np.zeros((len(hrefs), 2))
-    for i in range(2):
-        for e in res[i]:
-            if e[HREF] in href_to_idx:
-                idx = href_to_idx[e[HREF]]
-                caps[idx, i] = e[CAP]
-                divs[idx, i] = e[DIV]
+    def RET_PE(self, year):
+        d = self.year_data[year - self.yearS]
+        ret = np.copy(d[:,sc.EMPLOYEES])
+        idxs = ret != 0
+        ret[idxs] = d[idxs,sc.RETURN] / ret[idxs]
+        return ret
 
+    def INC_PE(self, year):
+        d = self.year_data[year - self.yearS]
+        ret = np.copy(d[:,sc.EMPLOYEES])
+        idxs = ret != 0
+        ret[idxs] = d[idxs,sc.INCOME] / ret[idxs]
+        return ret
 
-    fh = (caps[:,0] * caps[:,1]) != 0
-
-    change  = np.zeros(len(hrefs))
-    change[fh] = (caps[fh, 1] + divs[fh, 1]) / caps[fh,0] - 1
-
-    return change
-
-def kgv(conn, year, hrefs):
-    kgvs = np.zeros(len(hrefs))
-    for i, href in enumerate(hrefs):
-        r = sqlite_connector.load_kgv_data(conn, year, href)
-        if len(r) == 1:
-            kgvs[i] = r[0][1] / r[0][0]
-    return kgvs
-
-def kuv(conn, year, hrefs):
-    kuvs = np.zeros(len(hrefs))
-    for i, href in enumerate(hrefs):
-        r = sqlite_connector.load_kuv_data(conn, year, href)
-        if len(r) == 1:
-            kuvs[i] = r[0][1] / r[0][0]
-    return kuvs
-
-def kbv(conn, year, hrefs):
-    kbvs = np.zeros(len(hrefs))
-    for i, href in enumerate(hrefs):
-        r = sqlite_connector.load_kbv_data(conn, year, href)
-        if len(r) == 1:
-            kbvs[i] = r[0][2] / (r[0][0] - r[0][1])
-    return kbvs
-
-def div_rend(conn, year, hrefs):
-    kbvs = np.zeros(len(hrefs))
-    for i, href in enumerate(hrefs):
-        r = sqlite_connector.load_quotes(conn, year, href)
-        if len(r) == 1:
-            kbvs[i] = r[0][1] / r[0][0]
-    return kbvs
-
-
+    def YR_change(self, year, years=1):
+        off = year - self.yearS
+        d = self.year_data[off][:, sc.MARKET_CAP]
+        idxs = d != 0
+        divs = np.zeros(len(d))
+        for i in range(off + 1, off + years + 1):
+            divs[idxs] += self.year_data[i][idxs, sc.DIVIDENDS]
+        divs = (self.year_data[off + years][idxs, sc.MARKET_CAP] + divs[idxs]) / d[idxs]
+        return divs
 
 

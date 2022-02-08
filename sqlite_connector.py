@@ -1,4 +1,5 @@
 import sqlite3
+import numpy as np
 
 ################### write to db #################
 
@@ -53,6 +54,15 @@ def save_company_infos(year, companies):
     conn.close()
     
 ########### access db ###################
+MARKET_CAP = 0
+DIVIDENDS = 1
+RETURN = 2
+INCOME = 3
+OUTSTANDING_STOCKS = 4
+AKTIVA = 5
+PASSIVA = 6
+EMPLOYEES = 7
+
 def get_db(off='./'):
     return sqlite3.connect(f'{off}retrieve_data/companies.db')
 
@@ -72,14 +82,35 @@ def load_quotes_for_years(conn, year):
     cur.execute('SELECT * FROM QUOTES WHERE year==:yp ORDER BY href;', {"yp":year})
     return cur.fetchall()
 
-def load_quotes(conn, year, href):
-    sql = 'SELECT Q.marketcap, Q.dividends FROM QUOTES Q WHERE Q.href==? AND Q.year==?;'
-    return fetchall(conn, sql, (href, year))
+def load_hrefs(conn):
+    cur = conn.cursor()
+    cur.execute("SELECT DISTINCT(href) FROM COMPANY;")
+    hrefs = [row[0] for row in cur.fetchall()]
+    return hrefs
 
 def fetchall(conn, sql, params):
     cur = conn.cursor()
     cur.execute(sql, params)
     return cur.fetchall()
+
+def load_year_data(conn, year, hrefs):
+    data = np.zeros((len(hrefs), 8))
+    for i, href in enumerate(hrefs):
+        sql = ("SELECT Q.marketcap, Q.dividends, I.return, I.income, "
+            "B.outstanding_stocks, B.aktiva, B.passiva, B.employees FROM QUOTES Q "
+            "JOIN INCOME_STATEMENT I ON Q.href==I.href AND Q.year==I.year "
+            "JOIN BALANCE_SHEET B ON Q.href==B.href AND Q.year==B.year "
+            "WHERE Q.href==? AND Q.year==?")
+        r = fetchall(conn, sql, (href, year))
+        if len(r) == 1:
+            data[i] = r[0]
+    
+    return data
+
+def load_quotes(conn, year, href):
+    sql = 'SELECT Q.marketcap, Q.dividends FROM QUOTES Q WHERE Q.href==? AND Q.year==?;'
+    return fetchall(conn, sql, (href, year))
+
 
 def load_kgv_data(conn, year, href):
     sql = ("SELECT I.income, Q.marketcap FROM INCOME_STATEMENT I INNER JOIN QUOTES Q "
