@@ -5,6 +5,7 @@ class data_loader:
     def __init__(self, yearS = 2016, yearE = 2021):
         self.conn = sc.get_db('../')
         self.yearS = yearS
+        self.yearE = yearE
         self.hrefs = sc.load_hrefs(self.conn)
         self.year_data = []
         for year in range(yearS, yearE + 1):
@@ -25,7 +26,8 @@ class data_loader:
         for i in range(yearS - self.yearS, year - self.yearS + 1):
             income += self.year_data[i][:, sc.INCOME]
         idxs = income != 0
-        return (year - yearS + 1) * (d[idxs, sc.MARKET_CAP] / income[idxs])
+        income[idxs] = (year - yearS + 1) * (d[idxs, sc.MARKET_CAP] / income[idxs])
+        return income
 
     def PRR(self, year):
         d = self.year_data[year - self.yearS]
@@ -97,7 +99,35 @@ class data_loader:
         divs = np.zeros(len(d))
         for i in range(off + 1, off + years + 1):
             divs[idxs] += self.year_data[i][idxs, sc.DIVIDENDS]
-        divs = (self.year_data[off + years][idxs, sc.MARKET_CAP] + divs[idxs]) / d[idxs]
+        divs[idxs] = (self.year_data[off + years][idxs, sc.MARKET_CAP] + divs[idxs]) / d[idxs]
         return divs
 
+    def RET_change(self, year, years=1):
+        d = self.year_data[year - self.yearS][:, sc.RETURN]
+        idxs = d != 0
+        change = np.zeros(len(d))
+        change[idxs] = self.year_data[year + years - self.yearS][idxs, sc.RETURN] / d[idxs]
+        return change
 
+    def create_dataset(self, year, past=1, future=2):
+        if (year - past) < self.yearS or (year + future) > self.yearE:
+            print("invalid time interval with insufficent date selected")
+            return None
+        N = len(self.year_data[0])
+        X = np.empty((N, 13))
+        X[:,  0] = self.PER(year)
+        X[:,  1] = self.PER_H(year,year - past)
+        X[:,  2] = self.PRR(year)
+        X[:,  3] = self.PBR(year)
+        X[:,  4] = self.DIV_Y(year)
+        X[:,  5] = self.ACT_Y(year)
+        X[:,  6] = self.RET_Y(year)
+        X[:,  7] = self.CAP_Y(year)
+        X[:,  8] = self.DEBT(year)
+        X[:,  9] = self.INC_PE(year)
+        X[:, 10] = self.RET_PE(year)
+        X[:, 11] = self.YR_change(year - past, years=past)
+        X[:, 12] = self.RET_change(year - past, years=past)
+
+        y = self.RET_change(year, years=future)
+        return X,y
