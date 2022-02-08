@@ -1,6 +1,29 @@
 import sqlite_connector as sc
 import numpy as np
 
+FEATURE_NAMES = [
+    "PER",
+    "PER_H",
+    "PRR",
+    "PBR",
+    "DIV_Y",
+    "ACT_Y",
+    "RET_Y",
+    "CAP_Y",
+    "DEBT",
+    "INC_PE",
+    "RET_PE",
+    "YR_change",
+    "RET_change"
+]
+
+def _get_valid_idxs(X, y):
+    tmp = np.ones(len(X))
+    for i in range(X.shape[1]):
+        tmp *= X[:, i]
+    tmp *= y
+    return tmp != 0
+
 class data_loader:
     def __init__(self, yearS = 2016, yearE = 2021):
         self.conn = sc.get_db('../')
@@ -109,6 +132,7 @@ class data_loader:
         change[idxs] = self.year_data[year + years - self.yearS][idxs, sc.RETURN] / d[idxs]
         return change
 
+
     def create_dataset(self, year, past=1, future=2):
         if (year - past) < self.yearS or (year + future) > self.yearE:
             print("invalid time interval with insufficent date selected")
@@ -130,4 +154,26 @@ class data_loader:
         X[:, 12] = self.RET_change(year - past, years=past)
 
         y = self.RET_change(year, years=future)
-        return X,y
+
+        idxs = _get_valid_idxs(X, y)
+
+        hrefs_s = []
+        for i, valid in enumerate(idxs):
+            if valid:
+                hrefs_s.append(self.hrefs[i])
+
+        return hrefs_s, X[idxs],y[idxs]
+
+    def create_datasets(self, yearS, yearE, past=1, future=2):
+        hrefs = []
+        X = np.empty((0,13))
+        y = np.empty((0))
+        for year in range(yearS, yearE + 1):
+            hrefs_t, X_t, y_t = self.create_dataset(year, past=1, future=2)
+
+            hrefs += hrefs_t
+            X = np.vstack((X, X_t))
+            y = np.hstack((y, y_t))
+            print(X.shape)
+            print(y.shape)
+        return hrefs, X, y
