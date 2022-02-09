@@ -5,12 +5,20 @@ from lxml import etree
 import data
 import locale
 import sqlite_connector
+import time
 
 locale.setlocale(locale.LC_ALL, 'de_DE.utf-8')
 s = requests.Session()
 
 def get_float(float_str):
     return locale.atof(float_str)
+
+def get_float_val(float_str):
+    parts = float_str.split()
+    if len(parts) == 1:
+        return locale.atof(parts[0])
+    elif parts[1] == 'M':
+        return 1e6 * locale.atof(parts[0])
 
 def get_val(num_str):
     parts = num_str.split()
@@ -136,6 +144,7 @@ def _get_multiplier(val):
     print(f'unknown multiplier {val}')
     return 0
 
+#KRW, AUD
 def _get_currency(currency):
     if currency == 'EUR':
         return 1
@@ -145,6 +154,18 @@ def _get_currency(currency):
         return 0.1376
     elif currency == 'HKD':
         return 0.1124
+    elif currency == 'SEK':
+        return 0.0957
+    elif currency == 'JPY':
+        return 0.007576
+    elif currency == 'GBP':
+        return 1.187
+    elif currency == 'CHF':
+        return 0.9474
+    elif currency == 'KRW':
+        return 0.000732
+    elif currency == 'AUD':
+        return 0.6248
     print(f'unknown currency {currency}')
     return 0
 
@@ -162,6 +183,7 @@ def collect_table(root, name):
     return result
 
 def load_company_history(href):
+    print(f'load {href} hisotry')
     year_company_dict = dict()
     for year_off, page in _load_cmp_pages(href):
         print(year_off)
@@ -180,7 +202,6 @@ def load_company_history(href):
         print(curren)
         
         guv_dict = collect_table(page, "tabelleUndDiagramm guv new abstand")
-        print(guv_dict)
         stock_dict = collect_table(page, "tabelleUndDiagramm aktie new abstand")
         personal_dict = collect_table(page, "tabelleUndDiagramm personal new abstand")
         eval_dict = collect_table(page, "tabelleUndDiagramm bewertung new abstand")
@@ -190,22 +211,25 @@ def load_company_history(href):
             mult_cur = mult * curren
             if 'Umsatz' in guv_dict and guv_dict['Umsatz'][i] != '- \xa0 ':
                 try:
-                    sales = int(mult_cur * get_float(guv_dict['Umsatz'][i]))
-                    profit = int(mult_cur * get_float(guv_dict['Jahresüberschuss/-fehlbetrag'][i]))
-                    aktiva = int(mult_cur * get_float(guv_dict['Summe Aktiva'][i]))
-                    passiva = int(mult_cur * get_float(guv_dict['Summe Fremdkapital'][i]))
-                    num_stocks = int(mult_cur * get_float(stock_dict['Mio. Aktien im Umlauf (splitbereinigt)'][i]))
+                    sales = int(mult_cur * get_float_val(guv_dict['Umsatz'][i]))
+                    profit = int(mult_cur * get_float_val(guv_dict['Jahresüberschuss/-fehlbetrag'][i]))
+                    aktiva = int(mult_cur * get_float_val(guv_dict['Summe Aktiva'][i]))
+                    passiva = int(mult_cur * get_float_val(guv_dict['Summe Fremdkapital'][i]))
+                    num_stocks = int(mult_cur * get_float_val(stock_dict['Mio. Aktien im Umlauf (splitbereinigt)'][i]))
                     year_entry = data.ext_company(href, sales=sales, profit_loss=profit, 
                         sum_assets=aktiva, sum_liabilities=passiva, number_of_shares=num_stocks)
 
-                    eps = curren * get_float(stock_dict['Ergebnis je Aktie (unverwässert)'][i])
-                    dps = curren * get_float(stock_dict['Dividende je Aktie'][i])
+                    eps = curren * get_float_val(stock_dict['Ergebnis je Aktie (unverwässert)'][i])
+                    try:
+                        dps = curren * get_float_val(stock_dict['Dividende je Aktie'][i])
+                    except:
+                        dps = 0
                     ne = get_val(personal_dict['Personal am Ende des Jahres'][i])
                     year_entry.set_data_1(href=href, sales=sales, earnings_per_share=eps,
                         dividend_per_share=dps, number_of_employees=ne)
 
                     # kgv = curren * get_float(eval_dict[' KGV (Kurs/Gewinn) '][i])
-                    kuv = curren * get_float(eval_dict['KUV (Kurs/Umsatz)'][i])
+                    kuv = curren * get_float_val(eval_dict['KUV (Kurs/Umsatz)'][i])
                     # kbv = curren * get_float(eval_dict[' KBV (Kurs/Buchwert) '][i])
                     year_entry.set_data_2(href, sales, kgv=0, kuv=kuv, kbv=0)
 
@@ -213,3 +237,21 @@ def load_company_history(href):
                 except Exception as e:
                     print(f'error while parsing data >>>{e}<<<')
     return year_company_dict
+
+def load_all_known_company_hists():
+    starttime = time.time()
+    conn = sqlite_connector.get_db('../')
+    hrefs = set(sqlite_connector.load_hrefs(conn))
+    loaded = set(sqlite_connector.load_hrefs_for_year(conn, 2014))
+    unloaded = hrefs.difference(loaded)
+    for i, href in enumerate(unloaded):
+        if i % 5 == 4:
+            time.sleep(25)
+        time_elapsed = (time.time() - starttime) / 60
+        if href not in loaded:
+            cmps = load_company_history(href)
+            sqlite_connector.save_company_history(conn, cmps)
+            conn.commit()
+        print(f"{i} / {len(unloaded)} took {time_elapsed} min\t eta = {time_elapsed * len(unloaded) / (i + 1)}")
+
+load_all_known_company_hists()

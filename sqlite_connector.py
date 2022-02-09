@@ -100,9 +100,15 @@ def load_quotes_for_years(conn, year):
     cur.execute('SELECT * FROM QUOTES WHERE year==:yp ORDER BY href;', {"yp":year})
     return cur.fetchall()
 
+def load_hrefs_for_year(conn, year):
+    cur = conn.cursor()
+    cur.execute("SELECT DISTINCT(href) FROM INCOME_STATEMENT WHERE year=:yp ;", {"yp":year})
+    hrefs = [row[0] for row in cur.fetchall()]
+    return hrefs
+
 def load_hrefs(conn):
     cur = conn.cursor()
-    cur.execute("SELECT DISTINCT(href) FROM COMPANY;")
+    cur.execute("SELECT DISTINCT(href) FROM COMPANY", )
     hrefs = [row[0] for row in cur.fetchall()]
     return hrefs
 
