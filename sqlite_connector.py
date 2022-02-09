@@ -16,6 +16,24 @@ def generate_db():
 
     conn.close()
 
+def save_company_history(conn, company_dict):
+    quotes = []
+    incomes = []
+    balances = []
+    for year, c in company_dict.items():
+        market_cap = int(c.sales * c.kuv)
+        quotes.append((year, c.href, market_cap, c.dividend_per_share * c.number_of_shares))
+        balances.append((year, c.href, c.number_of_shares, c.sum_assets, c.sum_liabilities, c.number_of_employees))
+        incomes.append((year, c.href, c.sales, c.profit_loss))
+
+    print('save quotes...')
+    conn.executemany('INSERT or IGNORE INTO QUOTES VALUES(?,?,?,?)' ,quotes);
+    print('save balances...')
+    conn.executemany('INSERT or IGNORE INTO BALANCE_SHEET VALUES(?,?,?,?,?,?);',balances);
+    print('save incomes...')
+    conn.executemany('INSERT or IGNORE INTO INCOME_STATEMENT VALUES(?,?,?,?);',incomes);
+
+
 def save_companies(conn, companies):
     records = [(c.href, c.isin, c.name) for c in companies]
     conn.executemany('INSERT or IGNORE INTO COMPANY VALUES(?,?,?);',records);
