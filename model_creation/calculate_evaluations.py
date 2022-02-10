@@ -169,11 +169,9 @@ class data_loader:
         X = np.empty((0,13))
         y = np.empty((0))
         for year in range(yearS, yearE + 1):
-            hrefs_t, X_t, y_t = self.create_dataset(year, past=1, future=2)
+            hrefs_t, X_t, y_t = self.create_dataset(year, past=past, future=future)
 
             hrefs += hrefs_t
             X = np.vstack((X, X_t))
             y = np.hstack((y, y_t))
-            print(X.shape)
-            print(y.shape)
         return hrefs, X, y
